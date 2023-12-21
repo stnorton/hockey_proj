@@ -7,13 +7,11 @@ from tensorflow.keras.layers import Activation, concatenate, Dense, Dropout, Emb
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.preprocessing.text import Tokenizer
-import tensorflow as tf
 import os
-import sys
 
 #get filename as command line argument
-filename = sys.argv[1]
-year_name = sys.argv[2]
+filename = sys.argv[0]
+year_name = sys.argv[1]
 
 #change to correct directory
 data_path = 'C:/Users/Sean/Documents/Projects/hockey_proj/data/'
@@ -33,8 +31,6 @@ shots_df = shots_df[['event_type', 'secondary_type', 'event_player_1_name', 'str
 #rename column and generate unique player_ids
 shots_df = shots_df.rename(columns={'event_player_1_name': 'name'})
 shots_df['pid'] = pd.factorize(shots_df['name'])[0]
-shots_out = data_path + 'shots_df' + year_name + '.csv'
-shots_df.to_csv(shots_out)
 
 #get key mapping pids to names
 #get name index pairs from shots_df
@@ -68,8 +64,6 @@ shooters = shooter_tokenizer.texts_to_sequences(shots_df.pid)
 shooters = [x[0] for x in shooters]
 shooters = np.array(shooters)
 
-
-
 #set target for fitting embeddings - goals
 goal = np.array(shots_df.goal)
 shot_info = shots_df.drop(columns=['pid', 'goal', 'name', 'event_type'], axis=1, inplace=False)
@@ -82,7 +76,7 @@ shooter_input = Input(shape=(1, ), name="shooter_input")
 shot_input = Input(shape=(SHOT_COLS, ), name="shot_input")
 
 # shooter layers
-s1 = Embedding(NUM_SHOOTERS, VEC_SIZE, input_length=1, name = "shooter_embedding")(shooter_input)
+s1 = Embedding(NUM_SHOOTERS, VEC_SIZE, input_length=1)(shooter_input)
 s2 = Flatten()(s1)
 s3 = Dense(1, activation="sigmoid")(s2)
 
@@ -102,24 +96,21 @@ model = Model(inputs=[shooter_input, shot_input], outputs=output)
 #compile model
 model.compile(optimizer="adam", loss = "binary_crossentropy", metrics = ['accuracy'])
 
-#sanity check
-model.summary()
-
 #run model
 X = [shooters, shot_info]
 history = model.fit(X, goal, epochs=10)
 
 #get embeddings
-embedding_layer = model.get_layer('shooter_embedding')
+embedding_layer = model.get_layer('embedding')
 shooter_embeddings = embedding_layer.get_weights()[0]
 
 # make the embed vectors a pandas dataframe
 shooter_embeddings = pd.DataFrame(shooter_embeddings)
 shooter_embeddings.head()
 
-# a list of true shooter ids
-shooter_id = {k:v for k, v in shooter_tokenizer.index_word.items()}
-shooter_df = pd.DataFrame.from_dict(shooter_id, orient='index', columns=["playerid"])
+# make the embed vectors a pandas dataframe
+shooter_embeddings = pd.DataFrame(shooter_embeddings)
+shooter_embeddings.head()
 
 # name the columns
 shooter_embeddings.columns = ["e" + str(i + 1) for i in range(shooter_embeddings.shape[1])]
@@ -142,5 +133,3 @@ embed_out = data_path + 'shooter_embed_full' + year_name + '.csv'
 shooter_embeddings.to_csv(embed_out)
 
 names_out = data_path + 'embed_names_clean' + year_name + '.csv'
-names = shooter_embeddings[['name']]
-names.to_csv(names_out)

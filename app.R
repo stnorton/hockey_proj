@@ -15,6 +15,7 @@ library(readr)
 library(patchwork)
 library(lsa)
 library(proxy)
+library(shinyWidgets)
 
 ##FUNCTIONS-------------------------------------------
 #functions
@@ -110,12 +111,12 @@ get_player_plot <- function(name, assist_df){
 }
 
 
-player_embedding_lookup <- function(embeddings = embeddings_full, embeddings_raw = embeddings_collapsed_raw,
+player_embedding_lookup <- function(embeddings, embeddings_raw,
                                     pname) {
   
   name <- reverse_name(pname) # Reverse to format in dataframe
   
-  rel_row <- which(embeddings_full$name == name) # Find player
+  rel_row <- which(embeddings$name == name) # Find player
   rel_embedding <- embeddings_raw[rel_row, ]
   
   # Compute cosine similarity
@@ -167,22 +168,22 @@ get_shot_heat_and_goals <- function(name, shots_df){
 
 
 ##ASSISTS XG-------------------------------------------
-#load data
-ax_player_df <- read_csv('all_ind_ax23.csv')[2:7]
-#convert to numeric
-
-assist_df <- read_csv('all_ax_events23.csv')
-player_names <- read_csv('player_names_clean.csv')[,2, drop = T]
-player_names <- sort(player_names)
-#get names - not everyone on assists list is in the embeddings dataframe
-player_names_embed <- read.csv('embed_names_clean.csv')[,2, drop = T]
-player_names_embed <- sort(player_names_embed)
-
-#convert player df to more display friendly format
-ax_player_clean <- ax_player_df
-ax_player_clean$pname <- sapply(ax_player_clean$pname, reorder_name)
-colnames(ax_player_clean) <- c('Name', 'aXg', 'PaXg', 'SaXg', 'Avg. PaXg',
-                               'Avg. SaXg', 'Team')
+# #load data
+# ax_player_df <- read_csv('all_ind_ax23.csv')[2:7]
+# #convert to numeric
+# 
+# assist_df <- read_csv('all_ax_events23.csv')
+# player_names <- read_csv('player_names_clean.csv')[,2, drop = T]
+# player_names <- sort(player_names)
+# #get names - not everyone on assists list is in the embeddings dataframe
+# player_names_embed <- read.csv('embed_names_clean.csv')[,2, drop = T]
+# player_names_embed <- sort(player_names_embed)
+# 
+# #convert player df to more display friendly format
+# ax_player_clean <- ax_player_df
+# ax_player_clean$pname <- sapply(ax_player_clean$pname, reorder_name)
+# colnames(ax_player_clean) <- c('Name', 'aXg', 'PaXg', 'SaXg', 'Avg. PaXg',
+#                                'Avg. SaXg', 'Team')
 
 
 
@@ -198,15 +199,15 @@ colnames(ax_player_clean) <- c('Name', 'aXg', 'PaXg', 'SaXg', 'Avg. PaXg',
 #write.csv(shots_df_rel, 'embed_names_clean.csv')
 
 
-embeddings_full <- read.csv('shooter_embed_rel.csv')
-embeddings_full$X <- NULL
-# player_names_rel_rev <- sapply(player_names_embed, reverse_name)
-# embeddings_full_rel <- embeddings_full[which(embeddings_full$name %in% player_names_rel_rev), ]
-# write.csv(embeddings_full_rel, 'shooter_embed_rel.csv')
-embeddings_collapsed_raw <- readRDS('embeddings_collapsed.rds')
-shots_df <- read.csv('shots_df_embed23.csv')
-#shots_df <- shots_df[which(shots_df$name %in% player_names_embed), ]
-shots_df$X <- NULL
+# embeddings_full <- read.csv('shooter_embed_rel.csv')
+# embeddings_full$X <- NULL
+# # player_names_rel_rev <- sapply(player_names_embed, reverse_name)
+# # embeddings_full_rel <- embeddings_full[which(embeddings_full$name %in% player_names_rel_rev), ]
+# # write.csv(embeddings_full_rel, 'shooter_embed_rel.csv')
+# embeddings_collapsed_raw <- readRDS('embeddings_collapsed.rds')
+# shots_df <- read.csv('shots_df_embed23.csv')
+# #shots_df <- shots_df[which(shots_df$name %in% player_names_embed), ]
+# shots_df$X <- NULL
 
 
 
@@ -215,19 +216,28 @@ shots_df$X <- NULL
 ## APP-------------------------------------------------------------------------------
 ## app.R ##
 ui <- dashboardPage(
-  dashboardHeader(title = "NHL Analytics Dashboard '22-'23"),
+  dashboardHeader(title = "NHL Analytics Dashboard"),
   dashboardSidebar(
-    collapsed = TRUE,
+    collapsed = FALSE,
     sidebarMenu(
       menuItem("Assists xG", tabName = "axg_dashboard", icon = icon("chart-line")),
       menuItem("Shooter Comps", tabName = "embed_dashboard", icon = icon("chart-line"))
     )
-  ),
-  
+   ),
+
   ## Body content
   dashboardBody(
     tabItems(
       tabItem(tabName = 'axg_dashboard',
+              fluidRow(
+                box(
+                  title = "Season Input",
+                  width = 12,
+                  selectInput(inputId = 'season',
+                              label = 'Season',
+                              choices = c('2022-23', '2023-24'))
+                )
+              ),
               fluidRow(
                 box(
                   title = "Player Input",
@@ -247,6 +257,15 @@ ui <- dashboardPage(
               )
       ),
       tabItem(tabName = 'embed_dashboard',
+              fluidRow(
+                box(
+                  title = "Season Input",
+                  width = 12,
+                  selectInput(inputId = 'season2',
+                              label = 'Season',
+                              choices = c('2022-23', '2023-24'))
+                )
+              ),
               fluidRow(
                 box(
                   title = "Player Input",
@@ -275,51 +294,131 @@ ui <- dashboardPage(
 
 server <- function(input, output, session) { 
   
-  #name for assist xg
-  updateSelectizeInput(session, 'name', choices = player_names, server = TRUE)
+  ax_player_df <- reactive({
+    if(input$season == '2022-23') {
+      read_csv('./data/all_ind_ax23.csv')[2:7]
+    } else {
+      read_csv('./data/all_ind_ax24.csv')[2:7]
+    }
+  })
+  
+  assist_df <- reactive({
+    if(input$season == '2022-23') {
+      read_csv('./data/all_ax_events23.csv')
+    } else {
+      read_csv('./data/all_ax_events24.csv')
+    }
+  })
+  
+  player_names <- reactive({
+    if(input$season == '2022-23') {
+      read_csv('./data/player_names_clean.csv')[,2, drop = T]
+    } else {
+      read_csv('./data/player_names_clean24.csv')[,2, drop = T]
+    }
+  })
+  
+ sorted_player_names <- reactive({
+    sort(player_names())
+  })
+  
+  player_names_embed <- reactive({
+    if(input$season2 == '2022-23') {
+      read.csv('./data/embed_names_clean.csv')[,2, drop = T]
+    } else {
+      read.csv('./data/embed_names_clean24.csv')[,2, drop = T]
+    }
+  })
+  
+  sorted_player_names_embed <- reactive({
+    sort(player_names_embed())
+  })
+  
+  #convert player df to more display friendly format
+  
+  ax_player_clean <- reactive({
+    data <- ax_player_df()
+    data$pname <- sapply(data$pname, reorder_name)
+    colnames(data) <- c('Name', 'aXg', 'PaXg', 'SaXg', 'Avg. PaXg', 'Avg. SaXg', 'Team')
+    data
+  })
+  
+  
+  embeddings_full <- reactive({
+    if(input$season2 == '2022-23') {
+      read.csv('./data/shooter_embed_rel.csv')[,-1]
+    } else {
+      read.csv('./data/shooter_embed_full24.csv')[,-1]
+    }
+  })
+  
+ # embeddings_full$X <- NULL
+  
+  embeddings_collapsed_raw <- reactive({
+    if(input$season2 == '2022-23') {
+      readRDS('./data/embeddings_collapsed.rds')
+    } else {
+      readRDS('./data/embeddings_collapsed24.rds')
+    }
+  })
+  
+  shots_df <- reactive({
+    if(input$season2 == '2022-23') {
+      read.csv('./data/shots_df_embed23.csv')[,-1]
+    } else {
+      read.csv('./data/shots_df24.csv')[,-1]
+    }
+  })
+  #shots_df$X <- NULL
+
+
+  observe({
+    updateSelectizeInput(session, 'name', choices = sorted_player_names(), server = TRUE)
+    updateSelectizeInput(session, 'name_embed', choices = sorted_player_names_embed(), server = TRUE)
+  })
+  
   
   
   #create plot
   output$plot1 <- renderPlot({
     
-    get_player_plot(name = input$name, assist_df)
+    get_player_plot(name = input$name, assist_df = assist_df())
     
   })
   
   #create table
   output$ax_table <- renderReactable({
-    reactable(ax_player_clean,
+    reactable(ax_player_clean(),
               filterable = TRUE,
               defaultColDef = colDef(format = colFormat(digits = 3)))
   })
   
-  #name for embeddings
-  updateSelectizeInput(session, 'name_embed', choices = player_names_embed, server = TRUE)
+
   
   #observe event to get player comps
   player_comps <- reactive({
     req(input$name_embed)
-    player_embedding_lookup(pname = input$name_embed)
+    player_embedding_lookup(pname = input$name_embed, embeddings = embeddings_full(), embeddings_raw = embeddings_collapsed_raw())
   })
   
   
   output$plot2 <- 
     renderPlot({
-    get_shot_heat_and_goals(name = input$name_embed, shots_df)
+    get_shot_heat_and_goals(name = input$name_embed, shots_df())
     
   })
   
   output$plot3 <-   
     renderPlot({
       
-      get_shot_heat_and_goals(name = player_comps()[1], shots_df)
+      get_shot_heat_and_goals(name = player_comps()[1], shots_df())
       
     })
   
   output$plot4 <- 
       renderPlot({
         
-        get_shot_heat_and_goals(name = player_comps()[2], shots_df)
+        get_shot_heat_and_goals(name = player_comps()[2], shots_df())
         
       })
 

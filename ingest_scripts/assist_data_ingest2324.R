@@ -11,12 +11,46 @@
 library(hockeyR)
 library(sportyR)
 library(ggplot2)
+library(tidyverse)
 
 ##GET DATA----------------------------------------------------------
 all_df <- load_pbp('2023-24') #load 23-24 season
 
 
 ##CLEAN DATA-------------------------------------------------------
+#fix inconsistent names
+
+names_check_df <- bind_rows(
+  all_df %>%
+    select(event_player_1_name, event_player_1_id) %>%
+    rename(event_name = event_player_1_name, event_id = event_player_1_id),
+  all_df %>%
+    select(event_player_2_name, event_player_2_id) %>%
+    rename(event_name = event_player_2_name, event_id = event_player_2_id),
+  all_df %>%
+    select(event_player_3_name, event_player_3_id) %>%
+    rename(event_name = event_player_3_name, event_id = event_player_3_id)
+)
+
+names_unique_key <- names_check_df %>% #removes any names that are wrong in API data
+  filter(!grepl("\\s", event_name))
+
+names_unique_key <- distinct(names_unique_key)
+colnames(names_unique_key) <- c('fixed_name', 'id')
+
+#fix names for players 1 - 3
+all_df <- left_join(all_df, names_unique_key, by = c('event_player_1_id' = 'id'))
+all_df$event_player_1_name <- all_df$fixed_name
+all_df$fixed_name <- NULL
+
+all_df <- left_join(all_df, names_unique_key, by = c('event_player_2_id' = 'id'))
+all_df$event_player_2_name <- all_df$fixed_name
+all_df$fixed_name <- NULL
+
+all_df <- left_join(all_df, names_unique_key, by = c('event_player_3_id' = 'id'))
+all_df$event_player_3_name <- all_df$fixed_name
+all_df$fixed_name <- NULL
+
 #rename wrong aho
 wrong_aho <- which(all_df$event_player_1_name == "Sebastian.Aho"  &
                      all_df$event_team == "New York Islanders" |
