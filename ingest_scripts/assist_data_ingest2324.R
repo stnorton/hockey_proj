@@ -12,12 +12,104 @@ library(hockeyR)
 library(sportyR)
 library(ggplot2)
 library(tidyverse)
-
+library(lubridate)
 ##GET DATA----------------------------------------------------------
 all_df <- load_pbp('2023-24') #load 23-24 season
 
+#now cuts off at 12/29 - will scrape all days since then 
+update_vector <- seq(as.Date("2023-12-30"), Sys.Date() - 1, by = "days")
+
+try_scrape_day <- function(day){
+  tryCatch(
+    scrape_day(day),
+    error = function(e) NULL
+  )
+}
+
+test <- lapply(update_vector, try_scrape_day) #scrape all days since last update
+
+updated_df <- do.call(rbind.data.frame, test) #bind all days together
+
+#bind together
+all_df <- rbind(all_df, updated_df)
+
+
 
 ##CLEAN DATA-------------------------------------------------------
+#API changed how it returns player names, fixing so that it is consistent
+convert_names <- function(name) {
+  # Use gsub to replace the space with a dot
+  result <- gsub(" ", ".", name)
+  return(result)
+}
+
+# ##CLEAN UPDATES
+# name_cols <- c('event_player_1_name', 'event_player_2_name', 'event_player_3_name')
+# 
+# for(i in 1:length(name_cols)){
+#   
+#   updated_df[, name_cols[i]] <- sapply(updated_df[, name_cols[i]], convert_names)
+#   
+#   
+# }
+# 
+# 
+# #fix inconsistent names
+# 
+# names_check_df <- bind_rows(
+#   updated_df %>%
+#     select(event_player_1_name, event_player_1_id) %>%
+#     rename(event_name = event_player_1_name, event_id = event_player_1_id),
+#   updated_df %>%
+#     select(event_player_2_name, event_player_2_id) %>%
+#     rename(event_name = event_player_2_name, event_id = event_player_2_id),
+#   updated_df %>%
+#     select(event_player_3_name, event_player_3_id) %>%
+#     rename(event_name = event_player_3_name, event_id = event_player_3_id)
+# )
+# 
+# names_unique_key <- names_check_df %>% #removes any names that are wrong in API data
+#   filter(!grepl("\\s", event_name))
+# 
+# names_unique_key <- distinct(names_unique_key)
+# colnames(names_unique_key) <- c('fixed_name', 'id')
+
+# #fix names for players 1 - 3
+# updated_df <- left_join( updated_df, names_unique_key, by = c('event_player_1_id' = 'id'))
+# updated_df$event_player_1_name <-  updated_df$fixed_name
+# updated_df$fixed_name <- NULL
+# 
+# updated_df <- left_join(updated_df, names_unique_key, by = c('event_player_2_id' = 'id'))
+# updated_df$event_player_2_name <-  updated_df$fixed_name
+# updated_df$fixed_name <- NULL
+# 
+# updated_df<- left_join(updated_df, names_unique_key, by = c('event_player_3_id' = 'id'))
+# updated_df$event_player_3_name <- updated_df$fixed_name
+# updated_df$fixed_name <- NULL
+
+# #rename wrong aho
+# wrong_aho <- which(updated_df$event_player_1_name == "Sebastian.Aho"  &
+#                      updated_df$event_team == "New York Islanders" |
+#                      updated_df$event_player_2_name == "Sebastian.Aho"  &
+#                      updated_df$event_team == "New York Islanders" |
+#                      updated_df$event_player_3_name == "Sebastian.Aho"  &
+#                      updated_df$event_team == "New York Islanders")
+# 
+# 
+# updated_df[wrong_aho, c('event_player_1_name', 'event_player_2_name', 'event_player_3_name')] <-
+#   'Sebastian.Aho(NYI)'
+
+
+name_cols <- c('event_player_1_name', 'event_player_2_name', 'event_player_3_name')
+
+for(i in 1:length(name_cols)){
+
+  all_df[, name_cols[i]] <- sapply(all_df[, name_cols[i]], convert_names)
+
+
+}
+
+
 #fix inconsistent names
 
 names_check_df <- bind_rows(
@@ -63,6 +155,15 @@ wrong_aho <- which(all_df$event_player_1_name == "Sebastian.Aho"  &
 all_df[wrong_aho, c('event_player_1_name', 'event_player_2_name', 'event_player_3_name')] <-
   'Sebastian.Aho(NYI)'
 
+#calculate xg
+#updated_df <- calculate_xg(updated_df)
+
+##bind back together
+#all_df <- rbind(all_df, updated_df)
+
+#calcualte xg
+all_df <- calculate_xg(all_df)
+
 #filter to goals
 goals_df <- all_df[which(all_df$event_type == "GOAL"), ]
 
@@ -73,15 +174,15 @@ assist_df <- goals_df[,c('xg', 'event_player_2_name', 'event_player_3_name',
 #convert to one zone
 assist_df$x_fixed <- abs(assist_df$x_fixed)
 
-#rename wrong aho
-wrong_aho_p <- which(assist_df$event_player_2_name == "Sebastian.Aho" &
-                       assist_df$event_team == "New York Islanders")
-wrong_aho_s <- which(assist_df$event_player_3_name == "Sebastian.Aho" &
-                       assist_df$event_team == "New York Islanders")
-wrong_aho <- c(wrong_aho_p, wrong_aho_s)
-
-assist_df[wrong_aho, c('event_player_2_name', 'event_player_3_name')] <-
-  'Sebastian.Aho(NYI)'
+# # #rename wrong aho
+# wrong_aho_p <- which(assist_df$event_player_2_name == "Sebastian.Aho" &
+#                        assist_df$event_team == "New York Islanders")
+# wrong_aho_s <- which(assist_df$event_player_3_name == "Sebastian.Aho" &
+#                        assist_df$event_team == "New York Islanders")
+# wrong_aho <- c(wrong_aho_p, wrong_aho_s)
+# 
+# assist_df[wrong_aho, c('event_player_2_name', 'event_player_3_name')] <-
+#   'Sebastian.Aho(NYI)'
 
 
 

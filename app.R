@@ -114,10 +114,16 @@ get_player_plot <- function(name, assist_df){
 player_embedding_lookup <- function(embeddings, embeddings_raw,
                                     pname) {
   
+  
   name <- reverse_name(pname) # Reverse to format in dataframe
   
   rel_row <- which(embeddings$name == name) # Find player
   rel_embedding <- embeddings_raw[rel_row, ]
+  
+  if (length(rel_row) == 0) {
+    # Handle the case where the player is not found in embeddings
+    return(character(0))
+  }
   
   # Compute cosine similarity
   similarities <- apply(embeddings_raw, 1, function(x) cosine(rel_embedding, as.vector(x)))
@@ -223,7 +229,7 @@ ui <- dashboardPage(
       menuItem("Assists xG", tabName = "axg_dashboard", icon = icon("chart-line")),
       menuItem("Shooter Comps", tabName = "embed_dashboard", icon = icon("chart-line"))
     )
-   ),
+  ),
 
   ## Body content
   dashboardBody(
@@ -231,12 +237,28 @@ ui <- dashboardPage(
       tabItem(tabName = 'axg_dashboard',
               fluidRow(
                 box(
+                  title = "Information",
+                  width = 12,
+                  div(
+                    style = "text-align: left; font-size: 14px;",
+                    "This tab displays assist xG information for both primary and secondary assists.
+                    This shows where a player generates chances and the danger of those chances through shots or rebounds (primary) 
+                    and second order shots or rebounds (secondary).", br(), br(),
+                    "Data and xG calculation come from the hockeyR package."
+                  )
+                ),
+                box(
                   title = "Season Input",
                   width = 12,
                   selectInput(inputId = 'season',
                               label = 'Season',
-                              choices = c('2022-23', '2023-24'))
-                )
+                              choices = c('2022-23', '2023-24'),
+                             )
+                ),
+                div(
+                  style = "text-align: center; font-size: 14px;",
+                  helpText("Data from 2023-24 is current as of December 29th")
+                ),
               ),
               fluidRow(
                 box(
@@ -259,12 +281,28 @@ ui <- dashboardPage(
       tabItem(tabName = 'embed_dashboard',
               fluidRow(
                 box(
+                  title = "Information",
+                  width = 12,
+                  div(
+                    style = "text-align: left; font-size: 14px;",
+                    "This tab uses embeddings to find the two most similar shooters to any given player.
+                    Embeddings were fit using Tensorflow and are based on shot type, shot distance, shot location,
+                    shot angle, shot xG, and team strength state.", br(), 
+                    "Players with less than 50 shot attempts in 2023-24 may have unreliable embeddings.",br(),br(),
+                    "Data and xG calculation come from the hockeyR package."
+                  )
+                ),
+                box(
                   title = "Season Input",
                   width = 12,
                   selectInput(inputId = 'season2',
                               label = 'Season',
                               choices = c('2022-23', '2023-24'))
                 )
+              ),
+              div(
+                style = "text-align: center; font-size: 12px;",
+                helpText("Data from 2023-24 is current as of December 29th")
               ),
               fluidRow(
                 box(
@@ -326,7 +364,8 @@ server <- function(input, output, session) {
     if(input$season2 == '2022-23') {
       read.csv('./data/embed_names_clean.csv')[,2, drop = T]
     } else {
-      read.csv('./data/embed_names_clean24.csv')[,2, drop = T]
+      #note had to reorder manually - fix python script
+     read.csv('./data/embed_names_clean24.csv')[,2, drop = T]
     }
   })
   
@@ -408,23 +447,44 @@ server <- function(input, output, session) {
     
   })
   
-  output$plot3 <-   
-    renderPlot({
-      
-      get_shot_heat_and_goals(name = player_comps()[1], shots_df())
-      
-    })
+  # output$plot3 <-   
+  #   renderPlot({
+  #     
+  #     get_shot_heat_and_goals(name = player_comps()[1], shots_df())
+  #     
+  #   })
+  # 
+  # output$plot4 <- 
+  #     renderPlot({
+  #       
+  #       get_shot_heat_and_goals(name = player_comps()[2], shots_df())
+  #       
+  #     })
+  # 
+  # }
+
+  output$plot3 <- renderPlot({
+    comps <- player_comps()
+    if (length(comps) >= 3) {
+      get_shot_heat_and_goals(name = comps[2], shots_df())
+    } else {
+      # Display a text message when there are not enough comps
+      plot(1, type = "n", xaxt = "n", yaxt = "n", xlab = "", ylab = "")
+      text(1, 1, "Not enough similar players", cex = 1.5, col = "red")
+    }
+  })
   
-  output$plot4 <- 
-      renderPlot({
-        
-        get_shot_heat_and_goals(name = player_comps()[2], shots_df())
-        
-      })
-
-  }
-
-
+  output$plot4 <- renderPlot({
+    comps <- player_comps()
+    if (length(comps) >= 3) {
+      get_shot_heat_and_goals(name = comps[3], shots_df())
+    } else {
+      # Display a text message when there are not enough comps
+      plot(1, type = "n", xaxt = "n", yaxt = "n", xlab = "", ylab = "")
+      text(1, 1, "Not enough similar players", cex = 1.5, col = "red")
+    }
+  })
+}
 
 shinyApp(ui, server)
 

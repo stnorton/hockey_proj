@@ -5,9 +5,9 @@ account: stnorton
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 10670048
-bundleId: 8037699
+bundleId: 8131051
 url: https://stnorton.shinyapps.io/hockey_proj/
 version: 1
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: assist_data_ingest.R|burns_assists.png|necas_primary_hex.png|necas_secondary_hex.png|reorder_names.txt
+ignoredFiles: assist_data_ingest.R
